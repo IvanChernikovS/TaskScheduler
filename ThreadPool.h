@@ -31,7 +31,7 @@ public:
 };
 
 ThreadPool::ThreadPool(int threads) : stop(false) {
-    std::cout << "ThreadPool::ThreadPool(): Creating ThreadPool with " << threads << " threads" << std::endl;
+    LOG(INFO) << "ThreadPool::ThreadPool(): Creating ThreadPool with " << threads << " threads";
 
     for (auto i = 0; i < threads; ++i)
         workers.emplace_back(
@@ -42,16 +42,15 @@ ThreadPool::ThreadPool(int threads) : stop(false) {
                             std::unique_lock<std::mutex> lock(this->queue_mutex);
                             this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
                             if (this->stop && this->tasks.empty()) {
-                                std::cout << "ThreadPool::ThreadPool(): Worker " << i
-                                          << " is stopping because ThreadPool is stopped and tasks are empty. Exiting thread"
-                                          << std::endl;
+                                LOG(INFO) << "ThreadPool::ThreadPool(): Worker " << i
+                                          << " is stopping because ThreadPool is stopped. Exiting thread";
                                 return;
                             }
                             task = std::move(this->tasks.front());
                             this->tasks.pop();
                         }
 
-                        std::cout << "ThreadPool::ThreadPool(): Worker " << i << " is running a task" << std::endl;
+                        LOG(INFO) << "ThreadPool::ThreadPool(): Worker " << i << " is running a task";
                         task();
                     }
                 }
@@ -59,27 +58,28 @@ ThreadPool::ThreadPool(int threads) : stop(false) {
 }
 
 ThreadPool::~ThreadPool() noexcept {
-    std::cout << "ThreadPool::~ThreadPool(): Destroying ThreadPool" << std::endl;
+    LOG(INFO) << "ThreadPool::~ThreadPool(): Destroying ThreadPool";
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
         stop = true;
     }
+
     condition.notify_all();
+
     for (auto &worker: workers) {
         if (worker.joinable()) {
             worker.join();
-            std::cout << "ThreadPool::~ThreadPool(): Joined worker thread with ID: " << worker.get_id() << std::endl;
+            LOG(INFO) << "ThreadPool::~ThreadPool(): Joined worker thread with ID: " << worker.get_id();
         }
     }
 }
 
 void ThreadPool::Enqueue(const std::shared_ptr<Task> task) {
-    std::cout << "ThreadPool::enqueue(): Enqueuing task with ID: " << task->taskId << std::endl;
+    LOG(INFO) << "ThreadPool::Enqueue(): Enqueuing task with ID: " << task->taskId;
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
         tasks.emplace([task]() {
-            std::cout << "ThreadPool::enqueue(): Running task with ID: " << task->taskId << " and its callback"
-                      << std::endl;
+            LOG(INFO) << "ThreadPool::Enqueue(): Running task with ID: " << task->taskId << " and its callback";
             task->task();
             task->callback();
         });

@@ -26,7 +26,7 @@ private:
 
 public:
     explicit TaskSchedulerImpl() : taskIdCounter(0), pool(10), isRunning(false) {
-        std::cout << "TaskScheduler::TaskScheduler(): TaskScheduler was created" << std::endl;
+        LOG(INFO) << "TaskScheduler::TaskScheduler(): TaskScheduler was created";
     }
 
     int Schedule(std::function<void()> task, int delay, int priority, std::function<void()> callback) override {
@@ -37,8 +37,7 @@ public:
         taskIds.emplace(newTask->taskId);
         taskQueue.push(std::move(newTask));
 
-        std::cout << "TaskScheduler::Schedule(): Task with id {" << id << "} and priority {" << priority
-                  << "} scheduled" << std::endl;
+        LOG(INFO) << "TaskScheduler::Schedule(): Task with ID: " << id << " and priority: " << priority << " scheduled";
 
         cv.notify_all();
 
@@ -53,7 +52,7 @@ public:
 
             taskIds.erase(taskId);
 
-            std::cout << "TaskScheduler::Cancel(): Task with id {" << taskId << "} canceled" << std::endl;
+            LOG(INFO) << "TaskScheduler::Cancel(): Task with ID: " << taskId << " canceled";
         }
     }
 
@@ -65,25 +64,22 @@ public:
             incompleteTaskIds.push_back(id);
         }
 
-        std::cout << "TaskScheduler::GetIncompleteTasks(): There are {" << incompleteTaskIds.size()
-                  << "} incomplete tasks" << std::endl;
+        LOG(INFO) << "TaskScheduler::GetIncompleteTasks(): There are " << incompleteTaskIds.size()
+                  << " incomplete tasks" << std::endl;
 
         return incompleteTaskIds;
     }
 
     int GetEstimatedStartTime(int taskId) override {
-        // This function is placeholder since the estimation of start time is a complex problem
-        // and depends on many factors such as task duration, priority, etc.
-        std::cout << "TaskScheduler::getEstimatedStartTime(): Estimating start time for task id {" << taskId << "}"
-                  << std::endl;
+        LOG(INFO) << "TaskScheduler::getEstimatedStartTime(): Estimating start time for task ID: " << taskId;
         return -1;
     }
 
     void Start() override {
         isRunning = true;
-        std::cout << "TaskScheduler::Start(): Starting TaskScheduler" << std::endl;
+        LOG(INFO) << "TaskScheduler::Start(): Starting TaskScheduler";
         while (isRunning) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
             std::lock_guard<std::mutex> lock(mtx);
             while (!taskQueue.empty() && taskQueue.top()->startTime <= std::chrono::system_clock::now()) {
                 auto task = taskQueue.top();
@@ -91,14 +87,14 @@ public:
                 taskQueue.pop();
                 taskIds.erase(task->taskId);
 
-                std::cout << "TaskScheduler::Start(): Task with id {" << task->taskId << "} and priority {"
-                          << task->priority << "} started" << std::endl;
+                LOG(INFO) << "TaskScheduler::Start(): Task with ID: " << task->taskId << " and priority: "
+                          << task->priority << " started";
             }
         }
     }
 
     void Stop() override {
         isRunning = false;
-        std::cout << "TaskScheduler::Stop(): Stopping TaskScheduler" << std::endl;
+        LOG(INFO) << "TaskScheduler::Stop(): Stopping TaskScheduler";
     }
 };

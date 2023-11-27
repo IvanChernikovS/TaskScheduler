@@ -2,7 +2,11 @@
 #include <chrono>
 #include <random>
 
+#include "easylogging++.h"
+
 #include "TaskSchedulerImpl.h"
+
+INITIALIZE_EASYLOGGINGPP
 
 std::mt19937 GetRandomizer() {
     std::random_device randomDevice;
@@ -26,31 +30,36 @@ private:
     std::queue<int> taskDurations;
     std::queue<int> taskPriorities;
     std::queue<int> taskDelays;
+
+    std::mt19937 generator;
 public:
+    explicit Randomizer() : generator(GetRandomizer()) {
+        FillTaskDurations();
+        FillTaskPriorities();
+        FillTaskDelays();
+    }
+
     void FillTaskDurations() {
-        std::mt19937 gen = GetRandomizer();
         std::uniform_int_distribution<unsigned> distribution(1, 50);
 
         for (auto i = 0; i < 50; ++i) {
-            taskDurations.emplace(distribution(gen));
+            taskDurations.emplace(distribution(generator));
         }
     }
 
     void FillTaskPriorities() {
-        std::mt19937 gen = GetRandomizer();
         std::uniform_int_distribution<unsigned> distribution(1, 5);
 
         for (auto i = 0; i < 50; ++i) {
-            taskPriorities.emplace(distribution(gen));
+            taskPriorities.emplace(distribution(generator));
         }
     }
 
     void FillTaskDelays() {
-        std::mt19937 gen = GetRandomizer();
         std::uniform_int_distribution<unsigned> distribution(1, 5);
 
         for (auto i = 0; i < 50; ++i) {
-            taskDelays.emplace(distribution(gen) * 200);
+            taskDelays.emplace(distribution(generator) * 200);
         }
     }
 
@@ -78,33 +87,28 @@ public:
 
 void ScheduleTask(const std::unique_ptr<ITaskScheduler> &taskScheduler, Randomizer &randomizer) {
     auto task = [duration = randomizer.GetAndPopTaskDuration()]() {
-        std::cout << "Task running. Estimated time of running is:" << duration << std::endl;
+        LOG(INFO) << "Task running. Estimated time of running is: " << duration;
 
         std::this_thread::sleep_for(std::chrono::milliseconds(duration));
     };
 
-    auto callback = []() {
-        std::cout << "The callback of task" << std::endl;
-    };
+    auto callback = []() { LOG(INFO) << "The callback of task"; };
 
     taskScheduler->Schedule(task, randomizer.GetAndPopTaskDelay(), randomizer.GetAndPopTaskPriority(), callback);
 }
 
-int main() {
-    using namespace std::chrono_literals;
+int main(int, char **) {
+    LOG(INFO) << "Running Task Scheduler project";
 
     Randomizer randomizer;
-    randomizer.FillTaskDurations();
-    randomizer.FillTaskPriorities();
-    randomizer.FillTaskDelays();
 
     std::unique_ptr<ITaskScheduler> taskScheduler = std::make_unique<TaskSchedulerImpl>();
-    for (auto i = 0; i < 10; ++i) {
+    for (auto i = 0; i < 1; ++i) {
         ScheduleTask(taskScheduler, randomizer);
     }
     taskScheduler->Start();
 
-    std::this_thread::sleep_for(std::chrono::duration(10s));
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
     taskScheduler->Stop();
 
