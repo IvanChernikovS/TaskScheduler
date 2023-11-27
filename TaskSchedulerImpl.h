@@ -17,7 +17,7 @@
 class TaskSchedulerImpl : public ITaskScheduler {
 private:
     int taskIdCounter;
-    std::priority_queue <std::shared_ptr<Task>> taskQueue;
+    std::priority_queue<std::shared_ptr<Task>> taskQueue;
     std::unordered_set<int> taskIds;
     std::condition_variable cv;
     std::mutex mtx;
@@ -25,12 +25,12 @@ private:
     bool isRunning;
 
 public:
-    explicit TaskSchedulerImpl() : taskIdCounter(0), pool(4), isRunning(false) {
+    explicit TaskSchedulerImpl() : taskIdCounter(0), pool(10), isRunning(false) {
         std::cout << "TaskScheduler::TaskScheduler(): TaskScheduler was created" << std::endl;
     }
 
-    int Schedule(std::function<void()> task, int delay, int priority, std::function<void()> callback) {
-        std::lock_guard <std::mutex> lock(mtx);
+    int Schedule(std::function<void()> task, int delay, int priority, std::function<void()> callback) override {
+        std::lock_guard<std::mutex> lock(mtx);
 
         int id = ++taskIdCounter;
         auto newTask = std::make_unique<Task>(id, task, callback, priority, delay);
@@ -45,8 +45,8 @@ public:
         return id;
     }
 
-    void Cancel(int taskId) {
-        std::lock_guard <std::mutex> lock(mtx);
+    void Cancel(int taskId) override {
+        std::lock_guard<std::mutex> lock(mtx);
 
         if (taskIds.find(taskId) != taskIds.end()) {
             // TODO: cancel task in pool
@@ -57,8 +57,8 @@ public:
         }
     }
 
-    std::vector<int> GetIncompleteTaskIds() {
-        std::lock_guard <std::mutex> lock(mtx);
+    std::vector<int> GetIncompleteTaskIds() override {
+        std::lock_guard<std::mutex> lock(mtx);
 
         std::vector<int> incompleteTaskIds;
         for (const auto &id: taskIds) {
@@ -71,7 +71,7 @@ public:
         return incompleteTaskIds;
     }
 
-    int GetEstimatedStartTime(int taskId) {
+    int GetEstimatedStartTime(int taskId) override {
         // This function is placeholder since the estimation of start time is a complex problem
         // and depends on many factors such as task duration, priority, etc.
         std::cout << "TaskScheduler::getEstimatedStartTime(): Estimating start time for task id {" << taskId << "}"
@@ -79,12 +79,12 @@ public:
         return -1;
     }
 
-    void Start() {
+    void Start() override {
         isRunning = true;
         std::cout << "TaskScheduler::Start(): Starting TaskScheduler" << std::endl;
         while (isRunning) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            std::lock_guard <std::mutex> lock(mtx);
+            std::lock_guard<std::mutex> lock(mtx);
             while (!taskQueue.empty() && taskQueue.top()->startTime <= std::chrono::system_clock::now()) {
                 auto task = taskQueue.top();
                 pool.Enqueue(task);
@@ -97,7 +97,7 @@ public:
         }
     }
 
-    void Stop() {
+    void Stop() override {
         isRunning = false;
         std::cout << "TaskScheduler::Stop(): Stopping TaskScheduler" << std::endl;
     }

@@ -66,8 +66,7 @@ ThreadPool::~ThreadPool() noexcept {
     }
     condition.notify_all();
     for (auto &worker: workers) {
-        if(worker.joinable())
-        {
+        if (worker.joinable()) {
             worker.join();
             std::cout << "ThreadPool::~ThreadPool(): Joined worker thread with ID: " << worker.get_id() << std::endl;
         }
