@@ -10,8 +10,8 @@ add_executable(TaskScheduler
     Randomizer.cpp
     EasyLogging/easylogging++.cc)
 
-set(LoggerPath ${CMAKE_SOURCE_DIR}/EasyLogging)
-include_directories(${LoggerPath})
+include_directories(${CMAKE_SOURCE_DIR}/EasyLogging
+    ${CMAKE_SOURCE_DIR}/Interface)
 
 target_link_libraries(TaskScheduler
     ${CMAKE_THREAD_LIBS_INIT}

@@ -4,9 +4,9 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <functional>
-#include <iostream>
 #include <map>
 #include <queue>
 #include <thread>
@@ -19,12 +19,11 @@ class ThreadPool {
   std::vector<std::thread> workers;
   std::queue<std::function<void()>> tasks;
   std::mutex queue_mutex;
-  std::condition_variable condition;
-  bool stop;
+  std::condition_variable cv;
+  std::atomic_bool stop;
 
  public:
   explicit ThreadPool(int);
-
   ~ThreadPool() noexcept;
 
   void Enqueue(const std::shared_ptr<Task> task);
@@ -39,8 +38,8 @@ ThreadPool::ThreadPool(int threads) : stop(false) {
         std::function<void()> task;
         {
           std::unique_lock<std::mutex> lock(this->queue_mutex);
-          this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
-          if (this->stop && this->tasks.empty()) {
+          this->cv.wait(lock, [this] { return this->stop.load() || !this->tasks.empty(); });
+          if (this->stop.load() && this->tasks.empty()) {
             LOG(INFO) << "ThreadPool::ThreadPool(): Worker " << i
                       << " is stopping because ThreadPool is stopped. Exiting thread";
             return;
@@ -57,12 +56,9 @@ ThreadPool::ThreadPool(int threads) : stop(false) {
 
 ThreadPool::~ThreadPool() noexcept {
   LOG(INFO) << "ThreadPool::~ThreadPool(): Destroying ThreadPool";
-  {
-    std::unique_lock<std::mutex> lock(queue_mutex);
-    stop = true;
-  }
+  stop.store(true);
 
-  condition.notify_all();
+  cv.notify_all();
 
   for (auto& worker : workers) {
     if (worker.joinable()) {
@@ -73,9 +69,9 @@ ThreadPool::~ThreadPool() noexcept {
 }
 
 void ThreadPool::Enqueue(const std::shared_ptr<Task> task) {
-  LOG(INFO) << "ThreadPool::Enqueue(): Enqueuing task with ID: " << task->taskId;
   {
-    std::unique_lock<std::mutex> lock(queue_mutex);
+    LOG(INFO) << "ThreadPool::Enqueue(): Enqueuing task with ID: " << task->taskId;
+    std::lock_guard<std::mutex> lock(queue_mutex);
     tasks.emplace([task]() {
       LOG(INFO) << "ThreadPool::Enqueue(): Running task with ID: " << task->taskId
                 << " and its callback";
@@ -83,5 +79,5 @@ void ThreadPool::Enqueue(const std::shared_ptr<Task> task) {
       task->callback();
     });
   }
-  condition.notify_one();
+  cv.notify_one();
 }

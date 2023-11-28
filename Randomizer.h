@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <random>
 #include <queue>
+#include <random>
 
 class Randomizer {
  private:

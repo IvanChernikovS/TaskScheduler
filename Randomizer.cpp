@@ -30,7 +30,7 @@ void Randomizer::FillTaskDurations() {
   std::uniform_int_distribution<unsigned> distribution(1, 50);
 
   for (auto i = 0; i < containerCapacity; ++i) {
-    taskDurations.emplace(distribution(generator));
+    taskDurations.emplace(distribution(generator) * 100);
   }
 }
 
