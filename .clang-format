@@ -10,6 +10,7 @@ ReferenceAlignment: Left
 SortIncludes: CaseInsensitive
 IncludeBlocks: Regroup
 MaxEmptyLinesToKeep: 1
+SpacesBeforeTrailingComments: 1
 IncludeCategories:
   - Regex:           '^<.*\.h>'
     Priority:        1

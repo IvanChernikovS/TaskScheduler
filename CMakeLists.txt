@@ -7,6 +7,7 @@ find_package (Threads REQUIRED)
 
 add_executable(TaskScheduler
     main.cpp
+    Randomizer.cpp
     EasyLogging/easylogging++.cc)
 
 set(LoggerPath ${CMAKE_SOURCE_DIR}/EasyLogging)
