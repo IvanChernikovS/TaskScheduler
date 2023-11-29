@@ -9,6 +9,7 @@
 
 class ITaskScheduler {
  public:
+  explicit ITaskScheduler() = default;
   virtual ~ITaskScheduler() = default;
   virtual int Schedule(std::function<void()>&& task, int delay, int priority,
                        std::function<void()>&& callback) = 0;

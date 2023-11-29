@@ -19,9 +19,9 @@ class TaskSchedulerImpl : public ITaskScheduler {
   std::map<int, std::vector<std::shared_ptr<Task>>> taskQueue;
   std::unordered_set<int> taskIds;
   std::condition_variable cv;
-  std::mutex mtx;
+  std::mutex mutex;
   ThreadPool pool;
-  volatile bool isRunning;
+  std::atomic_bool isRunning;
 
  public:
   explicit TaskSchedulerImpl() : taskIdCounter(0), pool(10), isRunning(false) {
@@ -29,51 +29,61 @@ class TaskSchedulerImpl : public ITaskScheduler {
   }
 
   ~TaskSchedulerImpl() noexcept override {
-    isRunning = false;
-    cv.notify_all();
+    LOG(INFO) << "TaskScheduler::~TaskScheduler(): Destroying";
+    isRunning.store(false);
+    cv.notify_one();
   }
+
+  TaskSchedulerImpl(const TaskSchedulerImpl&) = delete;
+  TaskSchedulerImpl(TaskSchedulerImpl&&) = delete;
+
+  TaskSchedulerImpl& operator=(const TaskSchedulerImpl&) = delete;
+  TaskSchedulerImpl& operator=(TaskSchedulerImpl&&) = delete;
 
   int Schedule(std::function<void()>&& task, int delay, int priority,
                std::function<void()>&& callback) override {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::mutex> lock(mutex);
 
     int id = ++taskIdCounter;
     auto newTask =
         std::make_unique<Task>(id, std::move(task), std::move(callback), priority, delay);
-    taskIds.emplace(newTask->taskId);
     taskQueue[priority].emplace_back(std::move(newTask));
-    // taskQueue.push(std::move(newTask));
+    taskIds.emplace(id);
 
     LOG(INFO) << "TaskScheduler::Schedule(): Task with ID: " << id << " and priority: " << priority
               << " scheduled";
 
-    cv.notify_all();
+    cv.notify_one();
 
     return id;
   }
 
   int ScheduleCompletingTask() override {
-    auto task = []() { LOG(INFO) << "Running completing task."; };
-    auto callback = [this]() {
-      if (!taskQueue.empty()) {
-        LOG(INFO) << "Task queue is not empty. Scheduling completing task again.";
-        ScheduleCompletingTask();
+    // std::lock_guard<std::mutex> lock(mutex);
+    auto task = [] { LOG(INFO) << "Running completing task"; };
+    auto callback = [self = this] {
+      LOG(INFO) << "The callback of completing task";
+
+      if (!self->taskQueue.empty()) {
+        LOG(INFO) << "Task queue is not empty, there are still {"
+                  << self->GetIncompleteTaskIds().size()
+                  << "} incomplete tasks. Scheduling completing task again";
+        self->ScheduleCompletingTask();
         return;
       }
-      isRunning = false;
-      LOG(INFO) << "The callback of completing task.";
-      cv.notify_all();
+
+      self->isRunning.store(false);
+      self->cv.notify_one();
     };
 
     return Schedule(task, 1000, 10, callback);
   }
 
   void Cancel(int taskId) override {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::mutex> lock(mutex);
 
     if (taskIds.find(taskId) != taskIds.end()) {
-      // TODO: cancel task in pool
-
+      // TODO: erase from taskQueue
       taskIds.erase(taskId);
 
       LOG(INFO) << "TaskScheduler::Cancel(): Task with ID: " << taskId << " canceled";
@@ -81,7 +91,7 @@ class TaskSchedulerImpl : public ITaskScheduler {
   }
 
   std::vector<int> GetIncompleteTaskIds() override {
-    std::lock_guard<std::mutex> lock(mtx);
+    std::lock_guard<std::mutex> lock(mutex);
 
     std::vector<int> incompleteTaskIds;
     for (const auto& id : taskIds) {
@@ -89,7 +99,7 @@ class TaskSchedulerImpl : public ITaskScheduler {
     }
 
     LOG(INFO) << "TaskScheduler::GetIncompleteTasks(): There are " << incompleteTaskIds.size()
-              << " incomplete tasks" << std::endl;
+              << " incomplete tasks";
 
     return incompleteTaskIds;
   }
@@ -101,21 +111,27 @@ class TaskSchedulerImpl : public ITaskScheduler {
   }
 
   void Start() override {
-    if (isRunning) {
+    if (isRunning.load()) {
       LOG(ERROR) << "TaskScheduler::Start(): Task scheduler is running already";
       return;
     }
 
-    isRunning = true;
+    isRunning.store(true);
     LOG(INFO) << "TaskScheduler::Start(): Starting TaskScheduler";
-    while (isRunning) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      std::lock_guard<std::mutex> lock(mtx);
+    while (isRunning.load()) {
+      std::unique_lock<std::mutex> lock(mutex);
+      auto pred = [self = this] { return !self->isRunning.load() || !self->taskQueue.empty(); };
+      if (!cv.wait_for(lock, std::chrono::minutes(1), pred)) {
+        LOG(INFO) << "Waiting for tasks timed out";
+        break;
+      }
+
       for (auto& tasks : taskQueue) {
         for (auto& task : tasks.second) {
           if (task && task->startTime <= std::chrono::system_clock::now()) {
-            pool.Enqueue(task);
-            taskIds.erase(task->taskId);
+            auto id = task->taskId;
+            pool.Enqueue(std::move(task));
+            taskIds.erase(id);
             task = nullptr;
           }
         }
@@ -126,25 +142,33 @@ class TaskSchedulerImpl : public ITaskScheduler {
   }
 
   void Stop() override {
-    if (!isRunning) {
+    if (!isRunning.load()) {
       LOG(ERROR) << "TaskScheduler::Stop(): TaskScheduler has been stopped already";
     }
 
-    isRunning = false;
+    isRunning.store(false);
     LOG(INFO) << "TaskScheduler::Stop(): Stopping TaskScheduler";
 
-    cv.notify_all();
+    cv.notify_one();
   }
 
  private:
   void ClearTaskQueue() {
+    if (taskQueue.empty()) {
+      return;
+    }
+
+    size_t counter = 0;
     for (auto it = taskQueue.begin(); it != taskQueue.end();) {
       if (it->second.empty() || std::all_of(it->second.cbegin(), it->second.cend(),
                                             [](const auto& task) { return !task; })) {
+        counter += it->second.size();
         it = taskQueue.erase(it);
       } else {
         ++it;
       }
     }
+
+    LOG_IF(counter > 0, DEBUG) << "Cleared "<< counter << " tasks";
   }
 };

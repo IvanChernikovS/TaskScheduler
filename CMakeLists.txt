@@ -16,3 +16,5 @@ include_directories(${CMAKE_SOURCE_DIR}/EasyLogging
 target_link_libraries(TaskScheduler
     ${CMAKE_THREAD_LIBS_INIT}
 )
+
+target_compile_definitions(TaskScheduler PRIVATE ELPP_THREAD_SAFE)

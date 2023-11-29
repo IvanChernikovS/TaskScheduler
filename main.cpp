@@ -26,7 +26,7 @@ int main(int, char**) {
   Randomizer randomizer(10);
 
   std::unique_ptr<ITaskScheduler> taskScheduler = std::make_unique<TaskSchedulerImpl>();
-  for (auto i = 0; i < 5; ++i) {
+  for (auto i = 0; i < 1; ++i) {
     ScheduleTask(taskScheduler, randomizer);
   }
   taskScheduler->ScheduleCompletingTask();
