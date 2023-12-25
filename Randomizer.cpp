@@ -10,13 +10,12 @@ namespace {
 std::mt19937 GetRandomizer() {
   std::random_device randomDevice;
   std::mt19937::result_type seed =
-      randomDevice() ^
-      ((std::mt19937::result_type)std::chrono::duration_cast<std::chrono::seconds>(
-           std::chrono::system_clock::now().time_since_epoch())
-           .count() +
-       (std::mt19937::result_type)std::chrono::duration_cast<std::chrono::microseconds>(
-           std::chrono::high_resolution_clock::now().time_since_epoch())
-           .count());
+      randomDevice() ^ ((std::mt19937::result_type)std::chrono::duration_cast<std::chrono::seconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                            .count() +
+                        (std::mt19937::result_type)std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::high_resolution_clock::now().time_since_epoch())
+                            .count());
 
   std::mt19937 gen(seed);
 
@@ -31,14 +30,6 @@ void Randomizer::FillTaskDurations() {
 
   for (auto i = 0; i < containerCapacity; ++i) {
     taskDurations.emplace(distribution(generator) * 100);
-  }
-}
-
-void Randomizer::FillTaskPriorities() {
-  std::uniform_int_distribution<unsigned> distribution(1, 5);
-
-  for (auto i = 0; i < containerCapacity; ++i) {
-    taskPriorities.emplace(distribution(generator));
   }
 }
 
@@ -57,17 +48,6 @@ int Randomizer::GetAndPopTaskDuration() {
 
   const auto duration = taskDurations.front();
   taskDurations.pop();
-
-  return duration;
-}
-
-int Randomizer::GetAndPopTaskPriority() {
-  if (taskPriorities.empty()) {
-    FillTaskPriorities();
-  }
-
-  const auto duration = taskPriorities.front();
-  taskPriorities.pop();
 
   return duration;
 }

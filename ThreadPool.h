@@ -7,7 +7,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
-#include <map>
 #include <queue>
 #include <thread>
 #include <vector>
@@ -46,16 +45,16 @@ ThreadPool::ThreadPool(int threads) : stop(false) {
           std::unique_lock<std::mutex> lock(self->queue_mutex);
           self->cv.wait(lock, [predSelf = self] { return predSelf->stop.load() || !predSelf->tasks.empty(); });
           if (self->stop.load() && self->tasks.empty()) {
-            LOG(INFO) << "ThreadPool::ThreadPool(): Worker with thread id:  "
-                      << std::this_thread::get_id() << " is stopping. Exiting thread";
+            LOG(INFO) << "ThreadPool::ThreadPool(): Worker with thread id:  " << std::this_thread::get_id()
+                      << " is stopping. Exiting thread";
             return;
           }
           task = std::move(self->tasks.front());
           self->tasks.pop();
         }
 
-        LOG(INFO) << "ThreadPool::ThreadPool(): Worker with thread id: "
-                  << std::this_thread::get_id() << " is running a task";
+        LOG(INFO) << "ThreadPool::ThreadPool(): Worker with thread id: " << std::this_thread::get_id()
+                  << " is running a task";
         task();
       }
     });
@@ -80,8 +79,7 @@ void ThreadPool::Enqueue(const std::shared_ptr<Task>&& task) {
     LOG(INFO) << "ThreadPool::Enqueue(): Enqueuing task with ID: " << task->taskId;
     std::lock_guard<std::mutex> lock(queue_mutex);
     tasks.emplace([task]() {
-      LOG(INFO) << "ThreadPool::Enqueue(): Running task with ID: " << task->taskId
-                << " and its callback";
+      LOG(INFO) << "ThreadPool::Enqueue(): Running task with ID: " << task->taskId << " and its callback";
       task->task();
       task->callback();
     });

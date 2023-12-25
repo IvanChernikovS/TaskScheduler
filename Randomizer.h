@@ -12,7 +12,6 @@ class Randomizer {
   int containerCapacity;
 
   std::queue<int> taskDurations;
-  std::queue<int> taskPriorities;
   std::queue<int> taskDelays;
 
   std::mt19937 generator;
@@ -21,10 +20,8 @@ class Randomizer {
   explicit Randomizer(int capacity);
 
   void FillTaskDurations();
-  void FillTaskPriorities();
   void FillTaskDelays();
 
   int GetAndPopTaskDuration();
-  int GetAndPopTaskPriority();
   int GetAndPopTaskDelay();
 };

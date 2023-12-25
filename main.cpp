@@ -9,15 +9,31 @@ INITIALIZE_EASYLOGGINGPP
 
 void ScheduleTask(const std::unique_ptr<ITaskScheduler>& taskScheduler, Randomizer& randomizer) {
   auto task = [duration = randomizer.GetAndPopTaskDuration()]() {
-    LOG(INFO) << "Task running. Estimated time of running is: " << duration << "ms";
+    LOG(INFO) << "Task running. Estimated time of running is: " << duration << " ms";
 
     std::this_thread::sleep_for(std::chrono::milliseconds(duration));
   };
 
   auto callback = []() { LOG(INFO) << "The callback of task"; };
 
-  taskScheduler->Schedule(task, randomizer.GetAndPopTaskDelay(), randomizer.GetAndPopTaskPriority(),
-                          callback);
+  taskScheduler->Schedule(task, randomizer.GetAndPopTaskDelay(), callback);
+}
+
+int ScheduleCompletingTask(const std::unique_ptr<ITaskScheduler>& taskScheduler) {
+  auto task = [&taskScheduler] {
+    LOG(INFO) << "Running completing task";
+    if (!taskScheduler->GetIncompleteTaskIds().empty()) {
+      LOG(INFO) << "Task queue is not empty, there are still {" << taskScheduler->GetIncompleteTaskIds().size()
+                << "} incomplete tasks. Scheduling completing task again";
+      ScheduleCompletingTask(taskScheduler);
+      return;
+    }
+
+    taskScheduler->Stop();
+  };
+  auto callback = [] { LOG(INFO) << "The callback of completing task"; };
+
+  return taskScheduler->Schedule(task, 1000, callback);
 }
 
 int main(int, char**) {
@@ -26,10 +42,10 @@ int main(int, char**) {
   Randomizer randomizer(10);
 
   std::unique_ptr<ITaskScheduler> taskScheduler = std::make_unique<TaskSchedulerImpl>();
-  for (auto i = 0; i < 1; ++i) {
+  for (auto i = 0; i < 2; ++i) {
     ScheduleTask(taskScheduler, randomizer);
   }
-  taskScheduler->ScheduleCompletingTask();
+  ScheduleCompletingTask(taskScheduler);
 
   taskScheduler->Start();
 
