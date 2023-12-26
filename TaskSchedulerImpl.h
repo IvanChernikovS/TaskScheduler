@@ -21,12 +21,13 @@ inline std::chrono::steady_clock::time_point GetTimePointInTheFuture(int delayIn
 
 class TaskSchedulerImpl : public ITaskScheduler {
  private:
-  std::atomic_bool isRunning;
   int taskIdCounter;
   std::chrono::steady_clock::time_point wakeUpTime;
   std::multimap<std::chrono::steady_clock::time_point, std::shared_ptr<Task>> taskQueue;
+  std::map<int, std::function<void()>> callbacks;
   std::unordered_set<int> taskIds;
   std::condition_variable cv;
+  std::atomic_bool isRunning;
   std::mutex mutex;
   ThreadPool pool;
 
@@ -95,9 +96,20 @@ class TaskSchedulerImpl : public ITaskScheduler {
       incompleteTaskIds.emplace_back(id);
     }
 
-    LOG(INFO) << "TaskScheduler::GetIncompleteTasks(): There are " << incompleteTaskIds.size() << " incomplete tasks";
-
     return incompleteTaskIds;
+  }
+
+  std::vector<int> GetIncompleteCallbacksIds() override {
+    std::lock_guard<std::mutex> lock(mutex);
+
+    std::vector<int> callbackIds;
+    callbackIds.reserve(callbacks.size());
+
+    for (const auto& pair : callbacks) {
+      callbackIds.emplace_back(pair.first);
+    }
+
+    return callbackIds;
   }
 
   long GetEstimatedStartTime(int taskId) override {
@@ -144,10 +156,13 @@ class TaskSchedulerImpl : public ITaskScheduler {
       auto task = taskQueue.cbegin()->second;
       auto id = task->taskId;
 
+      callbacks[id] = task->callback;
       pool.Enqueue(std::move(task));
 
       taskQueue.extract(taskQueue.cbegin()->first);
       taskIds.erase(id);
+
+      ExecuteCallbacks();
 
       UpdateWakeUpTime();
     }
@@ -158,6 +173,8 @@ class TaskSchedulerImpl : public ITaskScheduler {
       LOG(ERROR) << "TaskScheduler::Stop(): TaskScheduler has been stopped already";
     }
 
+    ExecuteCallbacks();
+
     isRunning.store(false);
     LOG(INFO) << "TaskScheduler::Stop(): Stopping TaskScheduler";
 
@@ -167,5 +184,14 @@ class TaskSchedulerImpl : public ITaskScheduler {
  private:
   void UpdateWakeUpTime() {
     wakeUpTime = taskQueue.empty() ? GetTimePointInTheFuture(100) : taskQueue.cbegin()->first;
+  }
+
+  void ExecuteCallbacks() {
+    const auto ids = pool.GetCompletedTaskIds();
+
+    for (const auto& id : ids) {
+      callbacks.at(id)();
+      callbacks.extract(id);
+    }
   }
 };

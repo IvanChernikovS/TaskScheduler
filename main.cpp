@@ -22,9 +22,10 @@ void ScheduleTask(const std::unique_ptr<ITaskScheduler>& taskScheduler, Randomiz
 int ScheduleCompletingTask(const std::unique_ptr<ITaskScheduler>& taskScheduler) {
   auto task = [&taskScheduler] {
     LOG(INFO) << "Running completing task";
-    if (!taskScheduler->GetIncompleteTaskIds().empty()) {
-      LOG(INFO) << "Task queue is not empty, there are still {" << taskScheduler->GetIncompleteTaskIds().size()
-                << "} incomplete tasks. Scheduling completing task again";
+    if (!taskScheduler->GetIncompleteTaskIds().empty() || taskScheduler->GetIncompleteCallbacksIds().size() > 1) {
+      LOG(INFO) << "Task scheduler can't finish its work: task queue size {"
+                << taskScheduler->GetIncompleteTaskIds().size() << "}, callbacks size: {"
+                << taskScheduler->GetIncompleteCallbacksIds().size() << "}";
       ScheduleCompletingTask(taskScheduler);
       return;
     }

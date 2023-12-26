@@ -17,6 +17,7 @@ class ThreadPool {
  private:
   std::vector<std::thread> workers;
   std::queue<std::function<void()>> tasks;
+  std::vector<int> completedTaskIds;
   std::mutex queue_mutex;
   std::condition_variable cv;
   std::atomic_bool stop;
@@ -32,6 +33,8 @@ class ThreadPool {
   ThreadPool& operator=(ThreadPool&&) = delete;
 
   void Enqueue(const std::shared_ptr<Task>&& task);
+
+  std::vector<int> GetCompletedTaskIds();
 };
 
 ThreadPool::ThreadPool(int threads) : stop(false) {
@@ -63,7 +66,6 @@ ThreadPool::ThreadPool(int threads) : stop(false) {
 ThreadPool::~ThreadPool() noexcept {
   LOG(INFO) << "ThreadPool::~ThreadPool(): Destroying ThreadPool";
   stop.store(true);
-
   cv.notify_all();
 
   for (auto& worker : workers) {
@@ -78,11 +80,19 @@ void ThreadPool::Enqueue(const std::shared_ptr<Task>&& task) {
   {
     LOG(INFO) << "ThreadPool::Enqueue(): Enqueuing task with ID: " << task->taskId;
     std::lock_guard<std::mutex> lock(queue_mutex);
-    tasks.emplace([task]() {
-      LOG(INFO) << "ThreadPool::Enqueue(): Running task with ID: " << task->taskId << " and its callback";
+    tasks.emplace([task, self = this] {
+      LOG(INFO) << "ThreadPool::Enqueue(): Running task with ID: " << task->taskId;
       task->task();
-      task->callback();
+
+      self->completedTaskIds.emplace_back(task->taskId);
     });
   }
   cv.notify_one();
+}
+
+std::vector<int> ThreadPool::GetCompletedTaskIds() {
+  const auto ids = completedTaskIds;
+  completedTaskIds.clear();
+
+  return ids;
 }
