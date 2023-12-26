@@ -3,10 +3,13 @@ project(TaskScheduler)
 
 set(CMAKE_CXX_STANDARD 17)
 
-find_package (Threads REQUIRED)
+find_package(Threads REQUIRED)
 
 add_executable(TaskScheduler
     main.cpp
+    TaskSchedulerImpl.cpp
+    Task.cpp
+    ThreadPool.cpp
     Randomizer.cpp
     EasyLogging/easylogging++.cc)
 
