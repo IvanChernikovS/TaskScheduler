@@ -4,24 +4,28 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <map>
 #include <mutex>
+#include <queue>
 #include <unordered_set>
 
 #include "ITaskScheduler.h"
-#include "ThreadPool.h"
+
+class ThreadPool;
+class Task;
 
 class TaskSchedulerImpl : public ITaskScheduler {
  private:
   int taskIdCounter;
   std::chrono::steady_clock::time_point wakeUpTime;
   std::multimap<std::chrono::steady_clock::time_point, std::shared_ptr<Task>> taskQueue;
-  std::map<int, std::function<void()>> callbacks;
+  std::queue<std::function<void()>> callbacks;
   std::unordered_set<int> taskIds;
   std::condition_variable cv;
   std::atomic_bool isRunning;
-  ThreadPool pool;
+  std::unique_ptr<ThreadPool> pool;
   mutable std::mutex mutex;
 
  public:
@@ -38,10 +42,11 @@ class TaskSchedulerImpl : public ITaskScheduler {
 
   void Start() override;
   void Stop() override;
-  void Cancel(int taskId) override;
+  void CancelTask(int taskId) override;
+
+  void UpdateCallbacks(std::function<void()>&& callback) override;
 
   std::vector<int> GetIncompleteTaskIds() const override;
-  std::vector<int> GetIncompleteCallbacksIds() const override;
   long GetEstimatedStartTime(int taskId) const override;
 
  private:

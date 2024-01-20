@@ -6,29 +6,31 @@
 
 #include "easylogging++.h"
 #include "Task.h"
+#include "ThreadPool.h"
 
 namespace {
-inline std::chrono::steady_clock::time_point GetTimePointInTheFuture(int delayInMs) {
-  return std::chrono::steady_clock::now() + std::chrono::milliseconds(delayInMs);
+inline std::chrono::steady_clock::time_point GetEndlessTimePoint() {
+  return std::chrono::steady_clock::now() + std::chrono::minutes(std::numeric_limits<int>::max());
 }
 } // namespace
 
 TaskSchedulerImpl::TaskSchedulerImpl()
-    : isRunning(false), taskIdCounter(0), wakeUpTime(GetTimePointInTheFuture(300)), pool(10) {
+    : taskIdCounter(0), wakeUpTime(GetEndlessTimePoint()), isRunning(false), pool(std::make_unique<ThreadPool>(10)) {
   LOG(INFO) << "TaskScheduler::TaskScheduler(): TaskScheduler was created";
 }
 
 TaskSchedulerImpl::~TaskSchedulerImpl() noexcept {
   LOG(INFO) << "TaskScheduler::~TaskScheduler(): Destroying";
+  pool->DetachTaskScheduler();
   isRunning.store(false);
   cv.notify_one();
 }
 
-int TaskSchedulerImpl::Schedule(std::function<void()>&& task, int delay, std::function<void()>&& callback) {
+int TaskSchedulerImpl::Schedule(std::function<void()>&& task, int delay, std::function<void()>&& callbackToStore) {
   std::lock_guard<std::mutex> lock(mutex);
 
   int id = ++taskIdCounter;
-  auto newTask = std::make_unique<Task>(id, std::move(task), std::move(callback), delay);
+  auto newTask = std::make_unique<Task>(id, std::move(task), std::move(callbackToStore), delay);
   const auto taskStartTime = newTask->startTime;
 
   taskQueue.emplace(taskStartTime, std::move(newTask));
@@ -46,7 +48,7 @@ int TaskSchedulerImpl::Schedule(std::function<void()>&& task, int delay, std::fu
   return id;
 }
 
-void TaskSchedulerImpl::Cancel(int taskId) {
+void TaskSchedulerImpl::CancelTask(int taskId) {
   std::lock_guard<std::mutex> lock(mutex);
 
   if (taskIds.find(taskId) != taskIds.end()) {
@@ -74,19 +76,6 @@ std::vector<int> TaskSchedulerImpl::GetIncompleteTaskIds() const {
   return incompleteTaskIds;
 }
 
-std::vector<int> TaskSchedulerImpl::GetIncompleteCallbacksIds() const {
-  std::lock_guard<std::mutex> lock(mutex);
-
-  std::vector<int> callbackIds;
-  callbackIds.reserve(callbacks.size());
-
-  for (const auto& pair : callbacks) {
-    callbackIds.emplace_back(pair.first);
-  }
-
-  return callbackIds;
-}
-
 long TaskSchedulerImpl::GetEstimatedStartTime(int taskId) const {
   std::lock_guard<std::mutex> lock(mutex);
   LOG(INFO) << "TaskScheduler::GetEstimatedStartTime(): Estimating start time for task ID: " << taskId;
@@ -107,48 +96,55 @@ void TaskSchedulerImpl::Start() {
   isRunning.store(true);
   LOG(INFO) << "TaskScheduler::Start(): Starting TaskScheduler";
 
+  pool->AttachTaskScheduler(this);
+
   while (isRunning.load()) {
     std::unique_lock<std::mutex> lock(mutex);
 
-    cv.wait_until(lock, wakeUpTime, [self = this] { return !self->isRunning.load(); });
+    const auto pred = [self = this] {
+      return !self->isRunning.load() || !self->taskQueue.empty() || !self->callbacks.empty();
+    };
+    cv.wait_until(lock, wakeUpTime, pred);
 
     if (!isRunning.load()) {
-      LOG(INFO) << "TaskScheduler::Start(): taskScheduler stopped";
       return;
     }
 
+    if (!callbacks.empty()) {
+      ExecuteCallbacks();
+      UpdateWakeUpTime();
+    }
+
     if (taskQueue.empty()) {
-      LOG(DEBUG) << "TaskScheduler::Start(): taskQueue is empty";
       UpdateWakeUpTime();
       continue;
     }
 
     if (wakeUpTime > std::chrono::steady_clock::now()) {
-      LOG_IF(!taskQueue.empty(), DEBUG) << "wakeUpTime > now() ";
       continue;
     }
 
     auto task = taskQueue.cbegin()->second;
     auto id = task->taskId;
 
-    callbacks[id] = task->callback;
-    pool.Enqueue(std::move(task));
+    pool->Enqueue(std::move(task));
 
     taskQueue.extract(taskQueue.cbegin()->first);
     taskIds.erase(id);
-
-    ExecuteCallbacks();
 
     UpdateWakeUpTime();
   }
 }
 
 void TaskSchedulerImpl::Stop() {
+  std::lock_guard<std::mutex> lock(mutex);
+
   if (!isRunning.load()) {
     LOG(ERROR) << "TaskScheduler::Stop(): TaskScheduler has been stopped already";
   }
 
   ExecuteCallbacks();
+  pool->DetachTaskScheduler();
 
   isRunning.store(false);
   LOG(INFO) << "TaskScheduler::Stop(): Stopping TaskScheduler";
@@ -156,15 +152,22 @@ void TaskSchedulerImpl::Stop() {
   cv.notify_one();
 }
 
+void TaskSchedulerImpl::UpdateCallbacks(std::function<void()>&& callback) {
+  callbacks.emplace(std::move(callback));
+  LOG(INFO) << "TaskScheduler::UpdateCallbacks(): there are {" << callbacks.size() << "} callbacks";
+
+  cv.notify_one();
+}
+
 void TaskSchedulerImpl::UpdateWakeUpTime() {
-  wakeUpTime = taskQueue.empty() ? GetTimePointInTheFuture(100) : taskQueue.cbegin()->first;
+  wakeUpTime = taskQueue.empty() ? GetEndlessTimePoint() : taskQueue.cbegin()->first;
 }
 
 void TaskSchedulerImpl::ExecuteCallbacks() {
-  const auto ids = pool.GetCompletedTaskIds();
+  LOG(INFO) << "TaskScheduler::ExecuteCallbacks(): execute {" << callbacks.size() << "} callbacks";
 
-  for (const auto& id : ids) {
-    callbacks.at(id)();
-    callbacks.extract(id);
+  while (!callbacks.empty()) {
+    callbacks.front()();
+    callbacks.pop();
   }
 }

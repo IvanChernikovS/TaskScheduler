@@ -12,6 +12,7 @@
 #include <vector>
 
 class Task;
+class ITaskScheduler;
 
 class ThreadPool {
  private:
@@ -21,6 +22,7 @@ class ThreadPool {
   std::mutex mutex;
   std::condition_variable cv;
   std::atomic_bool stop;
+  ITaskScheduler* taskScheduler;
 
  public:
   explicit ThreadPool(int);
@@ -32,7 +34,9 @@ class ThreadPool {
   ThreadPool& operator=(const ThreadPool&) = delete;
   ThreadPool& operator=(ThreadPool&&) = delete;
 
-  void Enqueue(const std::shared_ptr<Task>&& task);
+  void AttachTaskScheduler(ITaskScheduler* observer);
+  void DetachTaskScheduler();
+  void NotifyTaskScheduler(std::function<void()> callback);
 
-  std::vector<int> GetCompletedTaskIds();
+  void Enqueue(const std::shared_ptr<Task>&& task);
 };
