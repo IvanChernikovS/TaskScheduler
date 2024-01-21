@@ -1,15 +1,20 @@
 #include <chrono>
-#include <iostream>
 
 #include "easylogging++.h"
-#include "Randomizer.h"
 #include "TaskSchedulerImpl.h"
 
 INITIALIZE_EASYLOGGINGPP
 
-void ScheduleTask(const std::unique_ptr<ITaskScheduler>& taskScheduler, Randomizer& /*randomizer*/) {
-  auto task = [] { LOG(INFO) << "Task running."; };
-  auto callback = [] { LOG(INFO) << "Callback running"; };
+namespace {
+// to make a function load
+int Factorial(int n) {
+  if (n == 0 || n == 1) return 1;
+  return n * Factorial(n - 1);
+}
+
+void ScheduleTask(const std::unique_ptr<ITaskScheduler>& taskScheduler) {
+  auto task = []() { LOG(INFO) << "Task running. Factorial == " << Factorial(15); };
+  auto callback = []() { LOG(INFO) << "Task completed"; };
 
   taskScheduler->Schedule(task, 0, callback);
 }
@@ -27,24 +32,35 @@ int ScheduleCompletingTask(const std::unique_ptr<ITaskScheduler>& taskScheduler)
 void ShutdownTaskScheduler(int delayInSeconds, const std::unique_ptr<ITaskScheduler>& taskScheduler) {
   std::thread t([delayInSeconds, &taskScheduler]() {
     std::this_thread::sleep_for(std::chrono::seconds(delayInSeconds));
-    ScheduleCompletingTask(taskScheduler);
+    taskScheduler->Stop();
   });
   t.detach();
 }
 
+void StartTaskSchedulerWithTimeMeasure(const std::unique_ptr<ITaskScheduler>& taskScheduler) {
+  using std::chrono::duration;
+  using std::chrono::duration_cast;
+  using std::chrono::high_resolution_clock;
+  using std::chrono::milliseconds;
+
+  auto startTime = high_resolution_clock::now();
+  taskScheduler->Start();
+  auto endTime = high_resolution_clock::now();
+  auto timeDuration = duration_cast<milliseconds>(endTime - startTime);
+  LOG(INFO) << "Time of processing tasks: " << timeDuration.count() << "ms";
+}
+} // namespace
+
 int main(int, char**) {
-  LOG(INFO) << "Running Task Scheduler project";
-
-  Randomizer randomizer(10);
-
   std::unique_ptr<ITaskScheduler> taskScheduler = std::make_unique<TaskSchedulerImpl>();
   for (auto i = 0; i < 10000; ++i) {
-    ScheduleTask(taskScheduler, randomizer);
+    ScheduleTask(taskScheduler);
   }
 
   const auto delayForShutdownInSec = 1;
   ShutdownTaskScheduler(delayForShutdownInSec, taskScheduler);
-  taskScheduler->Start();
+
+  StartTaskSchedulerWithTimeMeasure(taskScheduler);
 
   return 0;
 }

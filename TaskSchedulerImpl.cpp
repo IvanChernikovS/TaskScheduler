@@ -34,7 +34,6 @@ int TaskSchedulerImpl::Schedule(std::function<void()>&& task, int delay, std::fu
   const auto taskStartTime = newTask->startTime;
 
   taskQueue.emplace(taskStartTime, std::move(newTask));
-  taskIds.emplace(id);
 
   UpdateWakeUpTime();
 
@@ -51,14 +50,11 @@ int TaskSchedulerImpl::Schedule(std::function<void()>&& task, int delay, std::fu
 void TaskSchedulerImpl::CancelTask(int taskId) {
   std::lock_guard<std::mutex> lock(mutex);
 
-  if (taskIds.find(taskId) != taskIds.end()) {
-    const auto startTime = std::find_if(taskQueue.cbegin(), taskQueue.cend(), [taskId](const auto& task) {
-                             return task.second->taskId == taskId;
-                           })->first;
+  const auto taskIt = std::find_if(taskQueue.cbegin(), taskQueue.cend(),
+                                   [taskId](const auto& pair) { return pair.second->taskId == taskId; });
 
-    taskQueue.extract(startTime);
-    taskIds.erase(taskId);
-
+  if (taskIt != taskQueue.end()) {
+    taskQueue.extract(taskIt);
     LOG(INFO) << "TaskScheduler::Cancel(): Task with ID: " << taskId << " canceled";
   }
 }
@@ -67,10 +63,10 @@ std::vector<int> TaskSchedulerImpl::GetIncompleteTaskIds() const {
   std::lock_guard<std::mutex> lock(mutex);
 
   std::vector<int> incompleteTaskIds;
-  incompleteTaskIds.reserve(taskIds.size());
+  incompleteTaskIds.reserve(taskQueue.size());
 
-  for (const auto& id : taskIds) {
-    incompleteTaskIds.emplace_back(id);
+  for (const auto& pair : taskQueue) {
+    incompleteTaskIds.emplace_back(pair.second->taskId);
   }
 
   return incompleteTaskIds;
@@ -80,11 +76,13 @@ long TaskSchedulerImpl::GetEstimatedStartTime(int taskId) const {
   std::lock_guard<std::mutex> lock(mutex);
   LOG(INFO) << "TaskScheduler::GetEstimatedStartTime(): Estimating start time for task ID: " << taskId;
 
-  return (std::find_if(taskQueue.cbegin(), taskQueue.cend(),
-                       [taskId](const auto& task) { return task.second->taskId == taskId; })
-              ->first -
-          std::chrono::steady_clock::now())
-      .count();
+  const auto taskIt = std::find_if(taskQueue.cbegin(), taskQueue.cend(),
+                                   [taskId](const auto& task) { return task.second->taskId == taskId; });
+  if (taskIt == taskQueue.cend()) {
+    return -1;
+  }
+
+  return (taskIt->first - std::chrono::steady_clock::now()).count();
 }
 
 void TaskSchedulerImpl::Start() {
@@ -124,13 +122,8 @@ void TaskSchedulerImpl::Start() {
       continue;
     }
 
-    auto task = taskQueue.cbegin()->second;
-    auto id = task->taskId;
-
-    pool->Enqueue(std::move(task));
-
+    pool->Enqueue(taskQueue.cbegin()->second);
     taskQueue.extract(taskQueue.cbegin()->first);
-    taskIds.erase(id);
 
     UpdateWakeUpTime();
   }

@@ -22,7 +22,6 @@ class TaskSchedulerImpl : public ITaskScheduler {
   std::chrono::steady_clock::time_point wakeUpTime;
   std::multimap<std::chrono::steady_clock::time_point, std::shared_ptr<Task>> taskQueue;
   std::queue<std::function<void()>> callbacks;
-  std::unordered_set<int> taskIds;
   std::condition_variable cv;
   std::atomic_bool isRunning;
   std::unique_ptr<ThreadPool> pool;

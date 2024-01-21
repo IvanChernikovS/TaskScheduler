@@ -38,5 +38,5 @@ class ThreadPool {
   void DetachTaskScheduler();
   void NotifyTaskScheduler(std::function<void()> callback);
 
-  void Enqueue(const std::shared_ptr<Task>&& task);
+  void Enqueue(const std::shared_ptr<Task>& task);
 };

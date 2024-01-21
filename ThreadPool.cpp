@@ -72,7 +72,7 @@ void ThreadPool::NotifyTaskScheduler(std::function<void()> callback) {
   taskScheduler->UpdateCallbacks(std::move(callback));
 }
 
-void ThreadPool::Enqueue(const std::shared_ptr<Task>&& task) {
+void ThreadPool::Enqueue(const std::shared_ptr<Task>& task) {
   {
     LOG(INFO) << "ThreadPool::Enqueue(): Enqueuing task with ID: " << task->taskId;
     std::lock_guard<std::mutex> lock(mutex);
