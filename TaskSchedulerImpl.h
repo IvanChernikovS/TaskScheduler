@@ -26,6 +26,7 @@ class TaskSchedulerImpl : public ITaskScheduler {
   std::atomic_bool isRunning;
   mutable std::mutex mutex;
 
+  /* TODO: remove protected but be able to test it */
  protected:
   std::unique_ptr<IThreadPool> pool;
 
