@@ -14,8 +14,8 @@ inline std::chrono::steady_clock::time_point GetEndlessTimePoint() {
 }
 } // namespace
 
-TaskSchedulerImpl::TaskSchedulerImpl()
-    : taskIdCounter(0), wakeUpTime(GetEndlessTimePoint()), isRunning(false), pool(std::make_unique<ThreadPool>(10)) {
+TaskSchedulerImpl::TaskSchedulerImpl(std::unique_ptr<IThreadPool> thread_pool)
+    : taskIdCounter(0), wakeUpTime(GetEndlessTimePoint()), isRunning(false), pool(std::move(thread_pool)) {
   LOG(INFO) << "TaskScheduler::TaskScheduler(): TaskScheduler was created";
 }
 

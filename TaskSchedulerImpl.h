@@ -11,9 +11,9 @@
 #include <queue>
 #include <unordered_set>
 
+#include "IThreadPool.h"
 #include "ITaskScheduler.h"
 
-class ThreadPool;
 class Task;
 
 class TaskSchedulerImpl : public ITaskScheduler {
@@ -24,11 +24,13 @@ class TaskSchedulerImpl : public ITaskScheduler {
   std::queue<std::function<void()>> callbacks;
   std::condition_variable cv;
   std::atomic_bool isRunning;
-  std::unique_ptr<ThreadPool> pool;
   mutable std::mutex mutex;
 
+ protected:
+  std::unique_ptr<IThreadPool> pool;
+
  public:
-  explicit TaskSchedulerImpl();
+  explicit TaskSchedulerImpl(std::unique_ptr<IThreadPool> thread_pool);
   ~TaskSchedulerImpl() noexcept override;
 
   TaskSchedulerImpl(const TaskSchedulerImpl&) = delete;

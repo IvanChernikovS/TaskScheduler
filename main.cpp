@@ -2,6 +2,7 @@
 
 #include "easylogging++.h"
 #include "TaskSchedulerImpl.h"
+#include "ThreadPool.h"
 
 INITIALIZE_EASYLOGGINGPP
 
@@ -52,7 +53,7 @@ void StartTaskSchedulerWithTimeMeasure(const std::unique_ptr<ITaskScheduler>& ta
 } // namespace
 
 int main(int, char**) {
-  std::unique_ptr<ITaskScheduler> taskScheduler = std::make_unique<TaskSchedulerImpl>();
+  std::unique_ptr<ITaskScheduler> taskScheduler = std::make_unique<TaskSchedulerImpl>(std::make_unique<ThreadPool>(10));
   for (auto i = 0; i < 10000; ++i) {
     ScheduleTask(taskScheduler);
   }

@@ -11,10 +11,12 @@
 #include <thread>
 #include <vector>
 
+#include "IThreadPool.h"
+
 class Task;
 class ITaskScheduler;
 
-class ThreadPool {
+class ThreadPool : public IThreadPool {
  private:
   std::vector<std::thread> workers;
   std::queue<std::function<void()>> tasks;
